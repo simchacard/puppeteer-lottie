@@ -316,7 +316,6 @@ ${inject.body || ""}
       }
 
       if (isMov) {
-        // -pix_fmt yuva444p10le
         let scale = `scale=${width}:-2`;
 
         if (width % 2 !== 0) {
@@ -337,12 +336,12 @@ ${inject.body || ""}
           "png",
           "-r",
           `${fps}`,
-          // "-i",
-          // "-",
-          // "-filter_complex",
-          // `[0:v][1:v]overlay[o];[o]${scale}:flags=bicubic[out]`,
-          // "-map",
-          // "[out]",
+          "-i",
+          "-",
+          "-filter_complex",
+          `[0:v][1:v]overlay[o];[o]${scale}:flags=bicubic[out]`,
+          "-map",
+          "[out]",
           "-c:v",
           "prores",
 
