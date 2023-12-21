@@ -1,25 +1,28 @@
-'use strict'
+"use strict";
 
-const fs = require('fs-extra')
-const execa = require('execa')
-const ora = require('ora')
-const ow = require('ow')
-const path = require('path')
-const pluralize = require('pluralize')
-const puppeteer = require('puppeteer')
-const tempy = require('tempy')
-const { spawn } = require('child_process')
-const { sprintf } = require('sprintf-js')
+const fs = require("fs-extra");
+const execa = require("execa");
+const ora = require("ora");
+const ow = require("ow");
+const path = require("path");
+const pluralize = require("pluralize");
+const puppeteer = require("puppeteer");
+const tempy = require("tempy");
+const { spawn } = require("child_process");
+const { sprintf } = require("sprintf-js");
 
-const { cssifyObject } = require('css-in-js-utils')
+const { cssifyObject } = require("css-in-js-utils");
 
-const lottieScript = fs.readFileSync(require.resolve('lottie-web/build/player/lottie.min'), 'utf8')
+const lottieScript = fs.readFileSync(
+  require.resolve("lottie-web/build/player/lottie.min"),
+  "utf8"
+);
 
 const injectLottie = `
 <script>
   ${lottieScript}
 </script>
-`
+`;
 
 /**
  * Renders the given Lottie animation via Puppeteer.
@@ -65,115 +68,122 @@ module.exports = async (opts) => {
     jpegQuality = 90,
     quiet = false,
     deviceScaleFactor = 1,
-    renderer = 'svg',
-    rendererSettings = { },
-    style = { },
-    inject = { },
-    puppeteerOptions = { },
+    renderer = "svg",
+    rendererSettings = {},
+    style = {},
+    inject = {},
+    puppeteerOptions = {},
     ffmpegOptions = {
       crf: 20,
-      profileVideo: 'main',
-      preset: 'medium'
+      profileVideo: "main",
+      preset: "medium",
     },
     gifskiOptions = {
       quality: 80,
-      fast: false
+      fast: false,
     },
-    progress = undefined
-  } = opts
+    progress = undefined,
+  } = opts;
 
-  let {
-    width = undefined,
-    height = undefined
-  } = opts
+  let { width = undefined, height = undefined } = opts;
 
-  ow(output, ow.string.nonEmpty, 'output')
-  ow(deviceScaleFactor, ow.number.integer.positive, 'deviceScaleFactor')
-  ow(renderer, ow.string.oneOf([ 'svg', 'canvas', 'html' ], 'renderer'))
-  ow(rendererSettings, ow.object.plain, 'rendererSettings')
-  ow(puppeteerOptions, ow.object.plain, 'puppeteerOptions')
-  ow(ffmpegOptions, ow.object.exactShape({
-    crf: ow.number.is((val) => {
-      return val >= 0 && val <= 51
-    }),
-    profileVideo: ow.string.oneOf(['baseline', 'main', 'high', 'high10', 'high422', 'high444']),
-    preset: ow.string.oneOf([
-      'ultrafast',
-      'superfast',
-      'veryfast',
-      'faster',
-      'fast',
-      'medium',
-      'slow',
-      'slower',
-      'veryslow',
-      'placebo'])
-  }))
-  ow(style, ow.object.plain, 'style')
-  ow(inject, ow.object.plain, 'inject')
+  ow(output, ow.string.nonEmpty, "output");
+  ow(deviceScaleFactor, ow.number.integer.positive, "deviceScaleFactor");
+  ow(renderer, ow.string.oneOf(["svg", "canvas", "html"], "renderer"));
+  ow(rendererSettings, ow.object.plain, "rendererSettings");
+  ow(puppeteerOptions, ow.object.plain, "puppeteerOptions");
+  ow(
+    ffmpegOptions,
+    ow.object.exactShape({
+      crf: ow.number.is((val) => {
+        return val >= 0 && val <= 51;
+      }),
+      profileVideo: ow.string.oneOf([
+        "baseline",
+        "main",
+        "high",
+        "high10",
+        "high422",
+        "high444",
+      ]),
+      preset: ow.string.oneOf([
+        "ultrafast",
+        "superfast",
+        "veryfast",
+        "faster",
+        "fast",
+        "medium",
+        "slow",
+        "slower",
+        "veryslow",
+        "placebo",
+      ]),
+    })
+  );
+  ow(style, ow.object.plain, "style");
+  ow(inject, ow.object.plain, "inject");
 
-  const ext = path.extname(output).slice(1).toLowerCase()
-  const isApng = (ext === 'apng')
-  const isGif = (ext === 'gif')
-  const isMp4 = (ext === 'mp4')
-  const isPng = (ext === 'png')
-  const isJpg = (ext === 'jpg' || ext === 'jpeg')
+  const ext = path.extname(output).slice(1).toLowerCase();
+  const isApng = ext === "apng";
+  const isGif = ext === "gif";
+  const isMp4 = ext === "mp4";
+  const isMov = ext === "mov";
+  const isPng = ext === "png";
+  const isJpg = ext === "jpg" || ext === "jpeg";
 
-  if (!(isApng || isGif || isMp4 || isPng || isJpg)) {
-    throw new Error(`Unsupported output format "${output}"`)
+  if (!(isApng || isGif || isMp4 || isPng || isJpg || isMov)) {
+    throw new Error(`Unsupported output format "${output}"`);
   }
 
-  const tempDir = isGif ? tempy.directory() : undefined
-  const tempOutput = isGif
-    ? path.join(tempDir, 'frame-%012d.png')
-    : output
-  const frameType = (isJpg ? 'jpeg' : 'png')
-  const isMultiFrame = isApng || isMp4 || /%d|%\d{2,3}d/.test(tempOutput)
+  const tempDir = isGif ? tempy.directory() : undefined;
+  const tempOutput = isGif ? path.join(tempDir, "frame-%012d.png") : output;
+  const frameType = isJpg ? "jpeg" : "png";
+  const isMultiFrame = isApng || isMp4 || /%d|%\d{2,3}d/.test(tempOutput);
 
-  let lottieData = animationData
+  let lottieData = animationData;
 
   if (animationPath) {
     if (animationData) {
-      throw new Error('"animationData" and "path" are mutually exclusive')
+      throw new Error('"animationData" and "path" are mutually exclusive');
     }
 
-    ow(animationPath, ow.string.nonEmpty, 'path')
+    ow(animationPath, ow.string.nonEmpty, "path");
 
-    lottieData = fs.readJsonSync(animationPath)
+    lottieData = fs.readJsonSync(animationPath);
   } else if (animationData) {
-    ow(animationData, ow.object.plain.nonEmpty, 'animationData')
+    ow(animationData, ow.object.plain.nonEmpty, "animationData");
   } else {
-    throw new Error('Must pass either "animationData" or "path"')
+    throw new Error('Must pass either "animationData" or "path"');
   }
 
-  const fps = ~~lottieData.fr
-  const { w = 640, h = 480 } = lottieData
-  const aR = w / h
+  const fps = ~~lottieData.fr;
+  const { w = 640, h = 480 } = lottieData;
+  const aR = w / h;
 
-  ow(fps, ow.number.integer.positive, 'animationData.fr')
-  ow(w, ow.number.integer.positive, 'animationData.w')
-  ow(h, ow.number.integer.positive, 'animationData.h')
+  ow(fps, ow.number.integer.positive, "animationData.fr");
+  ow(w, ow.number.integer.positive, "animationData.w");
+  ow(h, ow.number.integer.positive, "animationData.h");
 
   if (!(width && height)) {
     if (width) {
-      height = width / aR
+      height = width / aR;
     } else if (height) {
-      width = height * aR
+      width = height * aR;
     } else {
-      width = w
-      height = h
+      width = w;
+      height = h;
     }
   }
 
-  width = width | 0
-  height = height | 0
+  width = width | 0;
+  height = height | 0;
 
   const html = `
 <html>
 <head>
   <meta charset="UTF-8">
 
-  ${inject.head || ''}
+  ${inject.head || ""}
   ${injectLottie}
 
   <style>
@@ -186,8 +196,8 @@ module.exports = async (opts) => {
 body {
   background: transparent;
 
-  ${width ? 'width: ' + width + 'px;' : ''}
-  ${height ? 'height: ' + height + 'px;' : ''}
+  ${width ? "width: " + width + "px;" : ""}
+  ${height ? "height: " + height + "px;" : ""}
 
   overflow: hidden;
 }
@@ -196,12 +206,12 @@ body {
   ${cssifyObject(style)}
 }
 
-  ${inject.style || ''}
+  ${inject.style || ""}
   </style>
 </head>
 
 <body>
-${inject.body || ''}
+${inject.body || ""}
 
 <div id="root"></div>
 
@@ -234,208 +244,235 @@ ${inject.body || ''}
 
 </body>
 </html>
-`
+`;
 
   // useful for testing purposes
   // fs.writeFileSync('test.html', html)
 
-  const spinnerB = !quiet && ora('Loading browser').start()
+  const spinnerB = !quiet && ora("Loading browser").start();
 
-  const browser = opts.browser || await puppeteer.launch({
-    ...puppeteerOptions
-  })
-  const page = await browser.newPage()
+  const browser =
+    opts.browser ||
+    (await puppeteer.launch({
+      ...puppeteerOptions,
+    }));
+  const page = await browser.newPage();
 
   if (!quiet) {
-    page.on('console', console.log.bind(console))
-    page.on('error', console.error.bind(console))
+    page.on("console", console.log.bind(console));
+    page.on("error", console.error.bind(console));
   }
 
   await page.setViewport({
     deviceScaleFactor,
     width,
-    height
-  })
-  await page.setContent(html)
-  await page.waitForSelector('.ready')
-  const duration = await page.evaluate(() => duration)
-  const numFrames = await page.evaluate(() => numFrames)
+    height,
+  });
+  await page.setContent(html);
+  await page.waitForSelector(".ready");
+  const duration = await page.evaluate(() => duration);
+  const numFrames = await page.evaluate(() => numFrames);
 
-  const pageFrame = page.mainFrame()
-  const rootHandle = await pageFrame.$('#root')
+  const pageFrame = page.mainFrame();
+  const rootHandle = await pageFrame.$("#root");
 
   const screenshotOpts = {
     omitBackground: true,
     type: frameType,
-    quality: frameType === 'jpeg' ? jpegQuality : undefined
-  }
+    quality: frameType === "jpeg" ? jpegQuality : undefined,
+  };
 
   if (spinnerB) {
-    spinnerB.succeed()
+    spinnerB.succeed();
   }
 
-  const numOutputFrames = isMultiFrame ? numFrames : 1
-  const framesLabel = pluralize('frame', numOutputFrames)
-  const spinnerR = !quiet && ora(`Rendering ${numOutputFrames} ${framesLabel}`).start()
+  const numOutputFrames = isMultiFrame ? numFrames : 1;
+  const framesLabel = pluralize("frame", numOutputFrames);
+  const spinnerR =
+    !quiet && ora(`Rendering ${numOutputFrames} ${framesLabel}`).start();
 
-  let ffmpegP
-  let ffmpeg
-  let ffmpegStdin
+  let ffmpegP;
+  let ffmpeg;
+  let ffmpegStdin;
 
   if (isApng || isMp4) {
     ffmpegP = new Promise((resolve, reject) => {
-      const ffmpegArgs = [
-        '-v', 'error',
-        '-stats',
-        '-hide_banner',
-        '-y'
-      ]
+      const ffmpegArgs = ["-v", "error", "-stats", "-hide_banner", "-y"];
 
       if (isApng) {
         ffmpegArgs.push(
-          '-f', 'image2pipe', '-c:v', 'png', '-r', `${fps}`, '-i', '-',
-          '-plays', '0'
-        )
+          "-f",
+          "image2pipe",
+          "-c:v",
+          "png",
+          "-r",
+          `${fps}`,
+          "-i",
+          "-",
+          "-plays",
+          "0"
+        );
       }
 
       if (isMp4) {
-        let scale = `scale=${width}:-2`
+        let scale = `scale=${width}:-2`;
 
         if (width % 2 !== 0) {
           if (height % 2 === 0) {
-            scale = `scale=-2:${height}`
+            scale = `scale=-2:${height}`;
           } else {
-            scale = `scale=${width + 1}:-2`
+            scale = `scale=${width + 1}:-2`;
           }
         }
 
         ffmpegArgs.push(
-          '-f', 'lavfi', '-i', `color=c=black:size=${width}x${height}`,
-          '-f', 'image2pipe', '-c:v', 'png', '-r', `${fps}`, '-i', '-',
-          '-filter_complex', `[0:v][1:v]overlay[o];[o]${scale}:flags=bicubic[out]`,
-          '-map', '[out]',
-          '-c:v', 'libx264',
-          '-profile:v', ffmpegOptions.profileVideo,
-          '-preset', ffmpegOptions.preset,
-          '-crf', ffmpegOptions.crf,
-          '-movflags', 'faststart',
-          '-pix_fmt', 'yuv420p',
-          '-r', fps
-        )
+          "-f",
+          "lavfi",
+          "-i",
+          `color=c=black:size=${width}x${height}`,
+          "-f",
+          "image2pipe",
+          "-c:v",
+          "png",
+          "-r",
+          `${fps}`,
+          "-i",
+          "-",
+          "-filter_complex",
+          `[0:v][1:v]overlay[o];[o]${scale}:flags=bicubic[out]`,
+          "-map",
+          "[out]",
+          "-c:v",
+          "libx264",
+          "-profile:v",
+          ffmpegOptions.profileVideo,
+          "-preset",
+          ffmpegOptions.preset,
+          "-crf",
+          ffmpegOptions.crf,
+          "-movflags",
+          "faststart",
+          "-pix_fmt",
+          "yuv420p",
+          "-r",
+          fps
+        );
       }
 
-      ffmpegArgs.push(
-        '-frames:v', `${numOutputFrames}`,
-        '-an', output
-      )
+      ffmpegArgs.push("-frames:v", `${numOutputFrames}`, "-an", output);
 
-      console.log(ffmpegArgs.join(' '))
+      console.log(ffmpegArgs.join(" "));
 
-      ffmpeg = spawn(process.env.FFMPEG_PATH || 'ffmpeg', ffmpegArgs)
-      const { stdin, stdout, stderr } = ffmpeg
+      ffmpeg = spawn(process.env.FFMPEG_PATH || "ffmpeg", ffmpegArgs);
+      const { stdin, stdout, stderr } = ffmpeg;
 
       if (!quiet) {
-        stdout.pipe(process.stdout)
+        stdout.pipe(process.stdout);
       }
-      stderr.pipe(process.stderr)
+      stderr.pipe(process.stderr);
 
-      stdin.on('error', (err) => {
-        if (err.code !== 'EPIPE') {
-          return reject(err)
+      stdin.on("error", (err) => {
+        if (err.code !== "EPIPE") {
+          return reject(err);
         }
-      })
+      });
 
-      ffmpeg.on('exit', async (status) => {
+      ffmpeg.on("exit", async (status) => {
         if (status) {
-          return reject(new Error(`FFmpeg exited with status ${status}`))
+          return reject(new Error(`FFmpeg exited with status ${status}`));
         } else {
-          return resolve()
+          return resolve();
         }
-      })
+      });
 
-      ffmpegStdin = stdin
-    })
+      ffmpegStdin = stdin;
+    });
   }
 
   for (let frame = 0; frame < numFrames; ++frame) {
     const frameOutputPath = isMultiFrame
       ? sprintf(tempOutput, frame + 1)
-      : tempOutput
+      : tempOutput;
 
     // eslint-disable-next-line no-undef
-    await page.evaluate((frame) => animation.goToAndStop(frame, true), frame)
+    await page.evaluate((frame) => animation.goToAndStop(frame, true), frame);
     const screenshot = await rootHandle.screenshot({
-      path: (isApng || isMp4) ? undefined : frameOutputPath,
-      ...screenshotOpts
-    })
-    
-    if(progress) {
-      progress(frame, numFrames)
+      path: isApng || isMp4 ? undefined : frameOutputPath,
+      ...screenshotOpts,
+    });
+
+    if (progress) {
+      progress(frame, numFrames);
     }
 
     // single screenshot
     if (!isMultiFrame) {
-      break
+      break;
     }
 
     if (isApng || isMp4) {
       if (ffmpegStdin.writable) {
-        ffmpegStdin.write(screenshot)
+        ffmpegStdin.write(screenshot);
       }
     }
   }
 
-  await rootHandle.dispose()
+  await rootHandle.dispose();
   if (opts.browser) {
-    await page.close()
+    await page.close();
   } else {
-    await browser.close()
+    await browser.close();
   }
 
   if (spinnerR) {
-    spinnerR.succeed()
+    spinnerR.succeed();
   }
 
   if (isApng || isMp4) {
-    const spinnerF = !quiet && ora(`Generating ${isApng ? 'animated png' : 'mp4'} with FFmpeg`).start()
+    const spinnerF =
+      !quiet &&
+      ora(`Generating ${isApng ? "animated png" : "mp4"} with FFmpeg`).start();
 
-    ffmpegStdin.end()
-    await ffmpegP
+    ffmpegStdin.end();
+    await ffmpegP;
 
     if (spinnerF) {
-      spinnerF.succeed()
+      spinnerF.succeed();
     }
   } else if (isGif) {
-    const spinnerG = !quiet && ora(`Generating GIF with Gifski`).start()
+    const spinnerG = !quiet && ora(`Generating GIF with Gifski`).start();
 
-    const framePattern = tempOutput.replace('%012d', '*')
-    const escapePath = arg => arg.replace(/(\s+)/g, '\\$1')
+    const framePattern = tempOutput.replace("%012d", "*");
+    const escapePath = (arg) => arg.replace(/(\s+)/g, "\\$1");
 
     const params = [
-      '-o', escapePath(output),
-      '--fps', Math.min(gifskiOptions.fps || fps, 50), // most of viewers do not support gifs with FPS > 50
-      gifskiOptions.fast && '--fast',
-      '--quality', gifskiOptions.quality,
-      '--quiet',
-      escapePath(framePattern)
-    ].filter(Boolean)
+      "-o",
+      escapePath(output),
+      "--fps",
+      Math.min(gifskiOptions.fps || fps, 50), // most of viewers do not support gifs with FPS > 50
+      gifskiOptions.fast && "--fast",
+      "--quality",
+      gifskiOptions.quality,
+      "--quiet",
+      escapePath(framePattern),
+    ].filter(Boolean);
 
-    const executable = process.env.GIFSKI_PATH || 'gifski'
-    const cmd = [ executable ].concat(params).join(' ')
+    const executable = process.env.GIFSKI_PATH || "gifski";
+    const cmd = [executable].concat(params).join(" ");
 
-    await execa.shell(cmd)
+    await execa.shell(cmd);
 
     if (spinnerG) {
-      spinnerG.succeed()
+      spinnerG.succeed();
     }
   }
 
   if (tempDir) {
-    await fs.remove(tempDir)
+    await fs.remove(tempDir);
   }
 
   return {
     numFrames,
-    duration
-  }
-}
+    duration,
+  };
+};
