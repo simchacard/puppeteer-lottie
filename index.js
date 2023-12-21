@@ -295,7 +295,7 @@ ${inject.body || ""}
   let ffmpeg;
   let ffmpegStdin;
 
-  if (isApng || isMp4) {
+  if (isApng || isMp4 || isMov) {
     ffmpegP = new Promise((resolve, reject) => {
       const ffmpegArgs = ["-v", "error", "-stats", "-hide_banner", "-y"];
 
@@ -311,6 +311,53 @@ ${inject.body || ""}
           "-",
           "-plays",
           "0"
+        );
+      }
+
+      if (isMov) {
+         // -pix_fmt yuva444p10le
+        let scale = `scale=${width}:-2`;
+
+        if (width % 2 !== 0) {
+          if (height % 2 === 0) {
+            scale = `scale=-2:${height}`;
+          } else {
+            scale = `scale=${width + 1}:-2`;
+          }
+        }
+        ffmpegArgs.push(
+          // "-f",
+          // "lavfi",
+          // "-i",
+          // `color=c=black:size=${width}x${height}`,
+          "-f",
+          "image2pipe",
+          "-c:v",
+          "png",
+          "-r",
+          `${fps}`,
+          // "-i",
+          // "-",
+          // "-filter_complex",
+          // `[0:v][1:v]overlay[o];[o]${scale}:flags=bicubic[out]`,
+          // "-map",
+          // "[out]",
+          "-c:v",
+          "prores",
+
+
+          // "-profile:v",
+          // ffmpegOptions.profileVideo,
+          // "-preset",
+          // ffmpegOptions.preset,
+          // "-crf",
+          // ffmpegOptions.crf,
+          // "-movflags",
+          // "faststart",
+          "-pix_fmt",
+          "yuva444p10le",
+          "-r",
+          fps
         );
       }
 
@@ -397,7 +444,7 @@ ${inject.body || ""}
     // eslint-disable-next-line no-undef
     await page.evaluate((frame) => animation.goToAndStop(frame, true), frame);
     const screenshot = await rootHandle.screenshot({
-      path: isApng || isMp4 ? undefined : frameOutputPath,
+      path: isApng || isMp4 || isMov ? undefined : frameOutputPath,
       ...screenshotOpts,
     });
 
@@ -410,7 +457,7 @@ ${inject.body || ""}
       break;
     }
 
-    if (isApng || isMp4) {
+    if (isApng || isMp4 || isMov) {
       if (ffmpegStdin.writable) {
         ffmpegStdin.write(screenshot);
       }
@@ -428,10 +475,14 @@ ${inject.body || ""}
     spinnerR.succeed();
   }
 
-  if (isApng || isMp4) {
+  if (isApng || isMp4 || isMov) {
     const spinnerF =
       !quiet &&
-      ora(`Generating ${isApng ? "animated png" : "mp4"} with FFmpeg`).start();
+      ora(
+        `Generating ${
+          isApng ? "animated png" : isMov ? "mov" : "mp4"
+        } with FFmpeg`
+      ).start();
 
     ffmpegStdin.end();
     await ffmpegP;
