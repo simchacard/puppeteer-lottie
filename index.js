@@ -138,7 +138,8 @@ module.exports = async (opts) => {
   const tempDir = isGif ? tempy.directory() : undefined;
   const tempOutput = isGif ? path.join(tempDir, "frame-%012d.png") : output;
   const frameType = isJpg ? "jpeg" : "png";
-  const isMultiFrame = isApng || isMp4 || /%d|%\d{2,3}d/.test(tempOutput);
+  const isMultiFrame =
+    isApng || isMp4 || isMov || /%d|%\d{2,3}d/.test(tempOutput);
 
   let lottieData = animationData;
 
@@ -315,7 +316,7 @@ ${inject.body || ""}
       }
 
       if (isMov) {
-         // -pix_fmt yuva444p10le
+        // -pix_fmt yuva444p10le
         let scale = `scale=${width}:-2`;
 
         if (width % 2 !== 0) {
@@ -344,7 +345,6 @@ ${inject.body || ""}
           // "[out]",
           "-c:v",
           "prores",
-
 
           // "-profile:v",
           // ffmpegOptions.profileVideo,
