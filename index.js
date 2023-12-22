@@ -10,6 +10,8 @@ const puppeteer = require("puppeteer");
 const tempy = require("tempy");
 const { spawn } = require("child_process");
 const { sprintf } = require("sprintf-js");
+const { tmpdir } = require("os");
+const { writeFileSync } = require("fs");
 
 const { cssifyObject } = require("css-in-js-utils");
 
@@ -269,7 +271,10 @@ ${inject.body || ""}
     width,
     height,
   });
-  await page.setContent(html);
+  // await page.setContent(html);
+  let tempHtml = path.join(tmpdir(), "temp.html");
+  writeFileSync(tempHtml, html);
+  await page.goto("file://" + tempHtml);
   await page.waitForSelector(".ready");
   const duration = await page.evaluate(() => duration);
   const numFrames = await page.evaluate(() => numFrames);
