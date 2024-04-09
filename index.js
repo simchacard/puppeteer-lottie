@@ -20,9 +20,20 @@ const lottieScript = fs.readFileSync(
   "utf8"
 );
 
+const lottieScriptHtml = fs.readFileSync(
+  require.resolve("lottie-web/build/player/lottie_html.min"),
+  "utf8"
+);
+
 const injectLottie = `
 <script>
   ${lottieScript}
+</script>
+`;
+
+const injectLottieHtml = `
+<script>  
+  ${lottieScriptHtml}
 </script>
 `;
 
@@ -178,8 +189,8 @@ module.exports = async (opts) => {
     }
   }
 
-  width = width | 0;
-  height = height | 0;
+  width = width | 1080;
+  height = height | 1920;
 
   const html = `
 <html>
@@ -187,7 +198,7 @@ module.exports = async (opts) => {
   <meta charset="UTF-8">
 
   ${inject.head || ""}
-  ${injectLottie}
+  ${renderer === "html" ? injectLottieHtml : injectLottie}
 
   <style>
 * {
@@ -198,15 +209,17 @@ module.exports = async (opts) => {
 
 body {
   background: transparent;
+  margin: 0;
+  padding: 0;
 
-  ${width ? "width: " + width + "px;" : ""}
-  ${height ? "height: " + height + "px;" : ""}
+
+  ${width ? "width: " + width + "px;" : "1080px;"}
+  ${height ? "height: " + height + "px;" : "1920px;"}
 
   overflow: hidden;
 }
 
 #root {
-  ${cssifyObject(style)}
 }
 
   ${inject.style || ""}
@@ -216,7 +229,9 @@ body {
 <body>
 ${inject.body || ""}
 
-<div id="root"></div>
+<div
+  style="width: 1080px; height: 1920px;"
+id="root"></div>
 
 <script>
   const animationData = ${JSON.stringify(lottieData)}
@@ -274,13 +289,16 @@ ${inject.body || ""}
   // await page.setContent(html);
   let tempHtml = path.join(tmpdir(), "temp.html");
   writeFileSync(tempHtml, html);
+  console.log('====================================');
+  console.log(tempHtml);
+  console.log('====================================');
   await page.goto("file://" + tempHtml);
   await page.waitForSelector(".ready");
   const duration = await page.evaluate(() => duration);
   const numFrames = await page.evaluate(() => numFrames);
 
   const pageFrame = page.mainFrame();
-  const rootHandle = await pageFrame.$("#root");
+  const rootHandle = await pageFrame.$("body");
 
   const screenshotOpts = {
     omitBackground: true,
@@ -404,7 +422,11 @@ ${inject.body || ""}
 
     // eslint-disable-next-line no-undef
     await page.evaluate((frame) => animation.goToAndStop(frame, true), frame);
-    const screenshot = await rootHandle.screenshot({
+    // const screenshot = await rootHandle.screenshot({
+    //   path: isApng || isMp4 ? undefined : frameOutputPath,
+    //   ...screenshotOpts,
+    // });
+    const screenshot = await page.screenshot({
       path: isApng || isMp4 ? undefined : frameOutputPath,
       ...screenshotOpts,
     });
@@ -425,7 +447,7 @@ ${inject.body || ""}
     }
   }
 
-  await rootHandle.dispose();
+  // await rootHandle.dispose();
   if (opts.browser) {
     await page.close();
   } else {
